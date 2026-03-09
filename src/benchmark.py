@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from nonogram import TEST_CASES, solve_nonogram_dfs, solve_nonogram_brfs, solve_nonogram_heuristic
+from chess_puzzles import TEST_CASES, parse_fen, dfs, bfs, astar
 
 def run_benchmark():
     print("🚀 BẮT ĐẦU CHẠY BENCHMARK ĐÁNH GIÁ THUẬT TOÁN...")
@@ -14,6 +15,7 @@ def run_benchmark():
         "Heuristic (GBFS)": solve_nonogram_heuristic,
         "Blind (DFS)": solve_nonogram_dfs,
         "Blind (BrFS)": solve_nonogram_brfs
+
     }
 
     results_time = {algo: [] for algo in algorithms}
