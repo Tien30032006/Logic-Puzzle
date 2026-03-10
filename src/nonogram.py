@@ -1,6 +1,5 @@
 import os
 import json
-import copy
 import heapq
 import time
 import tracemalloc
@@ -9,9 +8,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from collections import deque
 
-# ==========================================
-# CẤU HÌNH GIAO DIỆN 
-# ==========================================
+
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -37,8 +34,18 @@ TEST_CASES = load_test_cases()
 # ==========================================
 # 1. HÀM SINH TỔ HỢP 
 # ==========================================
+PERM_CACHE = {}
+
 def get_permutations(clues, length):
-    if not clues: return [[-1] * length]
+    cache_key = (tuple(clues), length)
+    if cache_key in PERM_CACHE:
+        return PERM_CACHE[cache_key]
+
+    if not clues: 
+        res = [[-1] * length]
+        PERM_CACHE[cache_key] = res
+        return res
+
     perms = []
     c = clues[0]
     min_rest = sum(clues[1:]) + len(clues[1:])
@@ -49,167 +56,160 @@ def get_permutations(clues, length):
         else:
             for rest in get_permutations(clues[1:], length - len(prefix) - 1):
                 perms.append(prefix + [-1] + rest)
+                
+    PERM_CACHE[cache_key] = perms
     return perms
 
 # ==========================================
-# 2. HÀM ĐÁNH GIÁ HEURISTIC & PRUNING
+# 2. LỌC RÀNG BUỘC & HEURISTIC 
 # ==========================================
-def is_valid_partial_board(board, col_perms, row_idx):
-    rows, cols = len(board), len(board[0])
-    for j in range(cols):
-        assigned_cells = [(i, board[i][j]) for i in range(row_idx + 1)]
-        match_found = False
-        for p in col_perms[j]:
-            match = True
-            for idx, val in assigned_cells:
-                if p[idx] != val:
-                    match = False
-                    break
-            if match:
-                match_found = True
-                break
-        if not match_found:
-            return False
-    return True
+def filter_valid_perms(p_row, row_idx, current_col_perms):
+    new_col_perms = []
+    for j, val in enumerate(p_row):
+        valid_p = [cp for cp in current_col_perms[j] if cp[row_idx] == val]
+        if not valid_p: return False, []
+        new_col_perms.append(valid_p)
+    return True, new_col_perms
 
-def calc_heuristic_h(board, col_perms):
-    rows, cols = len(board), len(board[0])
+def filter_and_calc_heuristic_squared(p_row, row_idx, current_col_perms):
+    new_col_perms = []
     h_score = 0
-    for j in range(cols):
-        assigned_cells = [(i, board[i][j]) for i in range(rows) if board[i][j] != 0]
-        valid_count = 0
-        for p in col_perms[j]:
-            match = True
-            for idx, val in assigned_cells:
-                if p[idx] != val:
-                    match = False
-                    break
-            if match:
-                valid_count += 1
+    for j, val in enumerate(p_row):
+        valid_p = [cp for cp in current_col_perms[j] if cp[row_idx] == val]
+        if not valid_p: return float('inf'), []
+        new_col_perms.append(valid_p)
         
-        if valid_count == 0:
-            return float('inf')
-        
-        h_score += valid_count
-        
-    return h_score
+        h_score += len(valid_p) ** 2
+            
+    return h_score, new_col_perms
+
+def reconstruct_board(rows, cols, chosen_rows):
+    board = [[0] * cols for _ in range(rows)]
+    for r_idx, perm in chosen_rows.items():
+        board[r_idx] = perm
+    return board
 
 # ==========================================
-# 3. CÁC THUẬT TOÁN (BLIND SEARCH VÀ HEURISTIC )
+# 3. CÁC THUẬT TOÁN TÌM KIẾM
 # ==========================================
+
 def solve_nonogram_dfs(row_clues, col_clues):
     rows, cols = len(row_clues), len(col_clues)
     row_perms = [get_permutations(c, cols) for c in row_clues]
     col_perms = [get_permutations(c, rows) for c in col_clues]
-
-    initial_board = [[0] * cols for _ in range(rows)]
-    stack = [(0, initial_board)]
-
-    game_history = [copy.deepcopy(initial_board)]
+    
+    stack = [(0, {}, col_perms)]
+    
+    game_history = [reconstruct_board(rows, cols, {})]
     action_history = ["Bắt đầu Blind Search (DFS)"]
+    states_explored = 0 
 
     while stack:
-        row_idx, current_board = stack.pop()
+        row_idx, chosen_rows, curr_col_perms = stack.pop()
+        states_explored += 1
 
         if row_idx > 0:
-            game_history.append(copy.deepcopy(current_board))
-            action_history.append(f"DFS Duyệt: Đâm sâu xuống hàng {row_idx}")
+            game_history.append(reconstruct_board(rows, cols, chosen_rows))
+            action_history.append(f"DFS: Đâm sâu vào hàng {row_idx-1}")
 
         if row_idx == rows:
-            game_history.append(copy.deepcopy(current_board))
-            action_history.append("🎉 Đã điền xong bảng! TÌM THẤY GIẢI PHÁP BẰNG BLIND SEARCH (DFS).")
-            return game_history, action_history
+            game_history.append(reconstruct_board(rows, cols, chosen_rows))
+            action_history.append("🎉 Đã điền xong bảng! TÌM THẤY GIẢI PHÁP BẰNG DFS.")
+            return game_history, action_history, states_explored
 
         for p in reversed(row_perms[row_idx]):
-            new_board = copy.deepcopy(current_board)
-            new_board[row_idx] = p
-            
-            if is_valid_partial_board(new_board, col_perms, row_idx):
-                stack.append((row_idx + 1, new_board))
+            is_valid, new_col_perms = filter_valid_perms(p, row_idx, curr_col_perms)
+            if is_valid:
+                new_chosen = chosen_rows.copy()
+                new_chosen[row_idx] = p
+                stack.append((row_idx + 1, new_chosen, new_col_perms))
 
-    action_history.append("❌ Không tìm thấy giải pháp bằng Blind Search (DFS).")
-    return game_history, action_history
+    action_history.append("❌ Không tìm thấy giải pháp bằng DFS.")
+    return game_history, action_history, states_explored
+
 
 def solve_nonogram_brfs(row_clues, col_clues):
     rows, cols = len(row_clues), len(col_clues)
     row_perms = [get_permutations(c, cols) for c in row_clues]
     col_perms = [get_permutations(c, rows) for c in col_clues]
 
-    initial_board = [[0] * cols for _ in range(rows)]
+    queue = deque([(0, {}, col_perms)])
 
-    queue = deque([(0, initial_board)])
-
-    game_history = [copy.deepcopy(initial_board)]
+    game_history = [reconstruct_board(rows, cols, {})]
     action_history = ["Bắt đầu Blind Search (BrFS)"]
+    states_explored = 0
 
     while queue:
-        row_idx, current_board = queue.popleft()
+        row_idx, chosen_rows, curr_col_perms = queue.popleft()
+        states_explored += 1
 
         if row_idx > 0:
-            game_history.append(copy.deepcopy(current_board))
-            action_history.append(f"BrFS Duyệt: Loang rộng ở hàng {row_idx}")
+            game_history.append(reconstruct_board(rows, cols, chosen_rows))
+            action_history.append(f"BrFS: Loang rộng tại hàng {row_idx-1}")
 
         if row_idx == rows:
-            game_history.append(copy.deepcopy(current_board))
-            action_history.append("🎉 Đã điền xong bảng! TÌM THẤY GIẢI PHÁP BẰNG BLIND SEARCH (BrFS).")
-            return game_history, action_history
+            game_history.append(reconstruct_board(rows, cols, chosen_rows))
+            action_history.append("🎉 Đã điền xong bảng! TÌM THẤY GIẢI PHÁP BẰNG BrFS.")
+            return game_history, action_history, states_explored
 
         for p in row_perms[row_idx]:
-            new_board = copy.deepcopy(current_board)
-            new_board[row_idx] = p
-            
-            if is_valid_partial_board(new_board, col_perms, row_idx):
-                queue.append((row_idx + 1, new_board))
+            is_valid, new_col_perms = filter_valid_perms(p, row_idx, curr_col_perms)
+            if is_valid:
+                new_chosen = chosen_rows.copy()
+                new_chosen[row_idx] = p
+                queue.append((row_idx + 1, new_chosen, new_col_perms))
 
-    action_history.append("❌ Không tìm thấy giải pháp bằng Blind Search (BrFS).")
-    return game_history, action_history
+    action_history.append("❌ Không tìm thấy giải pháp bằng BrFS.")
+    return game_history, action_history, states_explored
+
 
 def solve_nonogram_heuristic(row_clues, col_clues):
     rows, cols = len(row_clues), len(col_clues)
     row_perms = [get_permutations(c, cols) for c in row_clues]
     col_perms = [get_permutations(c, rows) for c in col_clues]
 
-    initial_board = [[0] * cols for _ in range(rows)]
+    game_history = [reconstruct_board(rows, cols, {})]
+    action_history = ["Khởi tạo Heuristic"]
+    states_explored = 0
+
+    row_order = sorted(range(rows), key=lambda r: len(row_perms[r]))
     
-    h_initial = calc_heuristic_h(initial_board, col_perms)
-
+    h_initial = sum(len(p)**2 for p in col_perms)
+    
     counter = 0
-    open_list = [(h_initial, counter, 0, initial_board)]
-
-    game_history = [copy.deepcopy(initial_board)]
-    action_history = [f"Bắt đầu Heuristic | h(n) = {int(h_initial)}"]
+    open_list = [(h_initial, counter, 0, {}, col_perms)]
 
     while open_list:
-        current_h, _, row_idx, current_board = heapq.heappop(open_list)
+        current_h, _, step_idx, chosen_rows, curr_col_perms = heapq.heappop(open_list)
+        states_explored += 1
 
-        if row_idx > 0:
-            game_history.append(copy.deepcopy(current_board))
-            action_history.append(f"Heuristic Duyệt: Điền hàng {row_idx} | h(n) = {int(current_h)}")
+        if step_idx > 0:
+            game_history.append(reconstruct_board(rows, cols, chosen_rows))
+            action_history.append(f"Chọn nhánh Hàng {row_order[step_idx-1]} | Trọng số h(n): {int(current_h)}")
 
-        if row_idx == rows:
-            game_history.append(copy.deepcopy(current_board))
-            action_history.append(f"🎉 Đã điền xong bảng! TÌM THẤY GIẢI PHÁP (h(n) = {int(current_h)})")
-            return game_history, action_history
+        if step_idx == rows:
+            game_history.append(reconstruct_board(rows, cols, chosen_rows))
+            action_history.append(f"🎉 Đã điền xong bảng! TÌM THẤY GIẢI PHÁP (h(n): {int(current_h)})")
+            return game_history, action_history, states_explored
 
-        for p in row_perms[row_idx]:
-            new_board = copy.deepcopy(current_board)
-            new_board[row_idx] = p
-            
-            h_new = calc_heuristic_h(new_board, col_perms)
+        real_row_idx = row_order[step_idx]
+
+        for p in row_perms[real_row_idx]:
+            h_new, new_col_perms = filter_and_calc_heuristic_squared(p, real_row_idx, curr_col_perms)
 
             if h_new != float('inf'):
+                new_chosen = chosen_rows.copy()
+                new_chosen[real_row_idx] = p
                 counter += 1
-                heapq.heappush(open_list, (h_new, counter, row_idx + 1, new_board))
+                heapq.heappush(open_list, (h_new, counter, step_idx + 1, new_chosen, new_col_perms))
 
     action_history.append("❌ Không tìm thấy giải pháp bằng Heuristic.")
-    return game_history, action_history
-
+    return game_history, action_history, states_explored
 
 # ==========================================
 # 4. HÀM VẼ GIAO DIỆN CHUỖI
 # ==========================================
 def render_board_string(board, row_clues, col_clues, step, total_steps, action, algo_name=""):
-    # Giữ nguyên toàn bộ text của action để không mất thông số h(n)
     output_str = f"--- BƯỚC {step}/{total_steps} ({algo_name}) ---\n"
     output_str += f"⚡ {action}\n\n"
 
@@ -235,7 +235,7 @@ def render_board_string(board, row_clues, col_clues, step, total_steps, action, 
     return output_str
 
 # ==========================================
-# 5. GIAO DIỆN 
+# 5. GIAO DIỆN CHÍNH
 # ==========================================
 class NonogramModernApp(ctk.CTk):
     def __init__(self):
@@ -244,7 +244,6 @@ class NonogramModernApp(ctk.CTk):
         self.title("Solver: Nonogram Puzzle")
         self.geometry("1100x800")
         
-        # Biến trạng thái
         self.CACHE = {}
         self.game_history = []
         self.action_history = []
@@ -269,9 +268,6 @@ class NonogramModernApp(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # ----------------------------------
-        # THANH ĐIỀU KHIỂN BÊN TRÁI
-        # ----------------------------------
         self.sidebar_frame = ctk.CTkFrame(self, width=300, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(10, weight=1)
@@ -279,7 +275,6 @@ class NonogramModernApp(ctk.CTk):
         self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Nonogram", font=ctk.CTkFont(size=24, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
-        # --- Chọn Level ---
         self.label_select = ctk.CTkLabel(self.sidebar_frame, text="1. Chọn Level:", font=ctk.CTkFont(weight="bold"), anchor="w")
         self.label_select.grid(row=1, column=0, padx=20, pady=(10, 0), sticky="w")
         
@@ -296,23 +291,19 @@ class NonogramModernApp(ctk.CTk):
         self.btn_next_level = ctk.CTkButton(self.level_control_frame, text="▶", width=30, command=self.next_level)
         self.btn_next_level.pack(side="right", padx=(5, 0))
 
-        # --- Chọn Thuật toán ---
         self.label_algo = ctk.CTkLabel(self.sidebar_frame, text="2. Chọn thuật toán:", font=ctk.CTkFont(weight="bold"), anchor="w")
         self.label_algo.grid(row=4, column=0, padx=20, pady=(15, 0), sticky="w")
         
         self.combo_algo = ctk.CTkComboBox(self.sidebar_frame, values=["Heuristic (GBFS)", "Blind Search (DFS)", "Blind Search (BrFS)"], width=250)
         self.combo_algo.grid(row=5, column=0, padx=20, pady=5)
 
-        # Nút Giải
         self.btn_solve = ctk.CTkButton(self.sidebar_frame, text="Bắt đầu Giải", command=self.trigger_solve, fg_color="#1f538d")
         self.btn_solve.grid(row=6, column=0, padx=20, pady=(20, 10))
 
-        # Tự động chạy
         self.btn_auto = ctk.CTkButton(self.sidebar_frame, text="Tự động chạy ⏭", 
                                       command=self.toggle_auto_run, fg_color="#228B22", hover_color="#006400")
         self.btn_auto.grid(row=7, column=0, padx=20, pady=(10, 5), sticky="n")
 
-        # Thanh tốc độ
         self.label_speed = ctk.CTkLabel(self.sidebar_frame, text=f"Độ trễ: {self.auto_speed_ms}ms (Chậm ↔ Nhanh)", font=ctk.CTkFont(size=11))
         self.label_speed.grid(row=8, column=0, padx=20, pady=(5, 0), sticky="w")
         
@@ -320,21 +311,17 @@ class NonogramModernApp(ctk.CTk):
         self.slider_speed.grid(row=9, column=0, padx=20, pady=(0, 10), sticky="ew")
         self.slider_speed.set(150)
 
-        # Thống kê
         self.stats_frame = ctk.CTkFrame(self.sidebar_frame, corner_radius=10, fg_color="#2b2b2b")
         self.stats_frame.grid(row=10, column=0, padx=20, pady=20, sticky="nsew")
         
         self.label_stats_title = ctk.CTkLabel(self.stats_frame, text="Thống kê:", font=ctk.CTkFont(weight="bold"))
         self.label_stats_title.pack(pady=(10,0))
         
-        self.text_stats = ctk.CTkTextbox(self.stats_frame, width=230, height=80, font=("Arial", 11), 
+        self.text_stats = ctk.CTkTextbox(self.stats_frame, width=230, height=100, font=("Arial", 11), 
                                         fg_color="transparent", activate_scrollbars=False)
         self.text_stats.pack(padx=10, pady=10)
         self.text_stats.configure(state="disabled")
 
-        # ----------------------------------
-        # KHU VỰC HIỂN THỊ CHÍNH
-        # ----------------------------------
         self.text_area = ctk.CTkTextbox(self, font=("Courier New", 13), fg_color="#1e1e1e", border_width=1, border_color="#333333")
         self.text_area.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="nsew")
         self.text_area.configure(state="disabled")
@@ -355,9 +342,6 @@ class NonogramModernApp(ctk.CTk):
         self.btn_next = ctk.CTkButton(self.nav_frame, text="Tiếp ▶", command=self.on_next, width=80)
         self.btn_next.grid(row=0, column=2, padx=(10, 10))
 
-    # ==========================================
-    # LOGIC XỬ LÝ CHUYỂN LEVEL
-    # ==========================================
     def prev_level(self):
         if not self.testcase_keys: return
         current_val = self.combo_testcases.get()
@@ -378,9 +362,6 @@ class NonogramModernApp(ctk.CTk):
         new_idx = min(len(self.testcase_keys) - 1, idx + 1)
         self.combo_testcases.set(self.testcase_keys[new_idx])
 
-    # ==========================================
-    # LOGIC XỬ LÝ KHÁC
-    # ==========================================
     def on_speed_change(self, value):
         self.auto_speed_ms = int(value)
         self.label_speed.configure(text=f"Độ trễ: {self.auto_speed_ms}ms (Chậm ↔ Nhanh)")
@@ -407,13 +388,12 @@ class NonogramModernApp(ctk.CTk):
             tracemalloc.start()
             start_time = time.perf_counter()
 
-            # Gọi đúng hàm tương ứng với 3 thuật toán
             if algo == "Heuristic (GBFS)":
-                g_hist, a_hist = solve_nonogram_heuristic(self.current_row_clues, self.current_col_clues)
+                g_hist, a_hist, nodes = solve_nonogram_heuristic(self.current_row_clues, self.current_col_clues)
             elif algo == "Blind Search (DFS)":
-                g_hist, a_hist = solve_nonogram_dfs(self.current_row_clues, self.current_col_clues)
+                g_hist, a_hist, nodes = solve_nonogram_dfs(self.current_row_clues, self.current_col_clues)
             elif algo == "Blind Search (BrFS)":
-                g_hist, a_hist = solve_nonogram_brfs(self.current_row_clues, self.current_col_clues)
+                g_hist, a_hist, nodes = solve_nonogram_brfs(self.current_row_clues, self.current_col_clues)
 
             end_time = time.perf_counter()
             _, peak_mem = tracemalloc.get_traced_memory()
@@ -422,7 +402,7 @@ class NonogramModernApp(ctk.CTk):
             exec_time = end_time - start_time
             peak_memory_mb = peak_mem / (1024 * 1024)
 
-            stats_msg = f"Thuật toán: {algo}\nThời gian: {exec_time:.4f}s\nRAM đỉnh: {peak_memory_mb:.4f} MB"
+            stats_msg = f"Thuật toán: {algo}\nThời gian: {exec_time:.4f}s\nRAM đỉnh: {peak_memory_mb:.4f} MB\nNode đã duyệt: {nodes:,} nodes"
             
             self.CACHE[cache_key] = (g_hist, a_hist, stats_msg)
 
