@@ -12,9 +12,8 @@ from collections import deque
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-# ==========================================
 # 0. HÀM ĐỌC DỮ LIỆU TỪ FILE
-# ==========================================
+
 def load_test_cases():
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,9 +30,8 @@ def load_test_cases():
 
 TEST_CASES = load_test_cases()
 
-# ==========================================
 # 1. HÀM SINH TỔ HỢP 
-# ==========================================
+
 PERM_CACHE = {}
 
 def get_permutations(clues, length):
@@ -60,9 +58,8 @@ def get_permutations(clues, length):
     PERM_CACHE[cache_key] = perms
     return perms
 
-# ==========================================
 # 2. LỌC RÀNG BUỘC & HEURISTIC 
-# ==========================================
+
 def filter_valid_perms(p_row, row_idx, current_col_perms):
     new_col_perms = []
     for j, val in enumerate(p_row):
@@ -89,9 +86,7 @@ def reconstruct_board(rows, cols, chosen_rows):
         board[r_idx] = perm
     return board
 
-# ==========================================
 # 3. CÁC THUẬT TOÁN TÌM KIẾM
-# ==========================================
 
 def solve_nonogram_dfs(row_clues, col_clues):
     rows, cols = len(row_clues), len(col_clues)
@@ -206,9 +201,8 @@ def solve_nonogram_heuristic(row_clues, col_clues):
     action_history.append("❌ Không tìm thấy giải pháp bằng Heuristic.")
     return game_history, action_history, states_explored
 
-# ==========================================
 # 4. HÀM VẼ GIAO DIỆN CHUỖI
-# ==========================================
+
 def render_board_string(board, row_clues, col_clues, step, total_steps, action, algo_name=""):
     output_str = f"--- BƯỚC {step}/{total_steps} ({algo_name}) ---\n"
     output_str += f"⚡ {action}\n\n"
@@ -234,9 +228,8 @@ def render_board_string(board, row_clues, col_clues, step, total_steps, action, 
 
     return output_str
 
-# ==========================================
 # 5. GIAO DIỆN CHÍNH
-# ==========================================
+
 class NonogramModernApp(ctk.CTk):
     def __init__(self):
         super().__init__()

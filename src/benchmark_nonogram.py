@@ -6,9 +6,9 @@ import numpy as np
 from nonogram import TEST_CASES, solve_nonogram_dfs, solve_nonogram_brfs, solve_nonogram_heuristic
 
 def run_benchmark():
-    print("🚀 BẮT ĐẦU CHẠY BENCHMARK ĐÁNH GIÁ THUẬT TOÁN...")
+    print("BẮT ĐẦU CHẠY BENCHMARK ĐÁNH GIÁ THUẬT TOÁN...")
     all_tests = list(TEST_CASES.keys())
-    test_names = all_tests[0:20] 
+    test_names = all_tests[20:40] 
     
     algorithms = {
         "Heuristic (GBFS)": solve_nonogram_heuristic,
@@ -57,9 +57,7 @@ def run_benchmark():
                 results_time[algo_name].append(None)
                 results_mem[algo_name].append(None)
 
-    # ==========================================
-    # VẼ ĐỒ THỊ ĐƯỜNG (LINE CHART)
-    # ==========================================
+    # LINE CHART
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     short_labels = [name.split(':')[0] if ':' in name else name[:5] for name in test_names]
 
@@ -71,23 +69,23 @@ def run_benchmark():
 
     x_positions = range(len(test_names))
 
-    # --- 1. ĐỒ THỊ THỜI GIAN (TIME) ---
+    #  1. TIME
     for algo in algorithms:
         ax1.plot(x_positions, results_time[algo], label=algo, **styles[algo])
 
-    ax1.set_ylabel('Thời gian (Giây)', fontsize=11)
-    ax1.set_title('SO SÁNH THỜI GIAN THỰC THI (Đường càng thấp càng tốt)', fontweight='bold', fontsize=13)
+    ax1.set_ylabel('Execution Time (s)', fontsize=11)
+    ax1.set_title('Execution Time', fontweight='bold', fontsize=13)
     ax1.set_xticks(x_positions)
     ax1.set_xticklabels(short_labels, rotation=0, fontsize=10)
     ax1.legend()
     ax1.grid(True, linestyle=':', alpha=0.7)
 
-    # --- 2. ĐỒ THỊ BỘ NHỚ (MEMORY) ---
+    # 2. MEMORY
     for algo in algorithms:
         ax2.plot(x_positions, results_mem[algo], label=algo, **styles[algo])
 
-    ax2.set_ylabel('RAM Tiêu thụ (MB)', fontsize=11)
-    ax2.set_title('SO SÁNH ĐỘ PHỨC TẠP KHÔNG GIAN BỘ NHỚ (Đường càng thấp càng tốt)', fontweight='bold', fontsize=13)
+    ax2.set_ylabel('Memory Usage (MB)', fontsize=11)
+    ax2.set_title('Memory Usage', fontweight='bold', fontsize=13)
     ax2.set_xticks(x_positions)
     ax2.set_xticklabels(short_labels, rotation=0, fontsize=10)
     ax2.legend()

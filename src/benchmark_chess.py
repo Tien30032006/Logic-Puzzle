@@ -4,11 +4,16 @@ import matplotlib.pyplot as plt
 
 from chess_puzzles import TEST_CASES, parse_fen, dfs, bfs, astar
 
-def run_benchmark():
+def run_benchmark(target_prefix="ranger"):
+    print("CHẠY BENCHMARK CHESS PUZZLE")
+    all_test_names = list(TEST_CASES.keys())
+    test_names = [name for name in all_test_names if target_prefix.lower() in name.lower()]
 
-    print("🚀 CHẠY BENCHMARK CHESS PUZZLE")
+    if not test_names:
+        print(f"Không tìm thấy test case nào chứa từ khóa '{target_prefix}'!")
+        return
 
-    test_names = list(TEST_CASES.keys())
+    print(f"Các test case sẽ được chạy: {test_names}\n")
 
     algorithms = {
         "Heuristic (A*)": astar,
@@ -21,7 +26,7 @@ def run_benchmark():
 
     for test_name in test_names:
 
-        print(f"\n▶ Test: {test_name}")
+        print(f"▶ Test: {test_name}")
 
         fen = TEST_CASES[test_name]["fen"]
         board = parse_fen(fen)
@@ -67,10 +72,9 @@ def run_benchmark():
 
                 results_time[algo_name].append(None)
                 results_mem[algo_name].append(None)
+        print("-" * 40)
 
-    # ===============================
     # DRAW GRAPH
-    # ===============================
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
 
@@ -82,10 +86,7 @@ def run_benchmark():
         "Blind (BFS)": {"color": "#ff7f0e", "marker": "^", "linewidth": 2.5, "linestyle": "--"}
     }
 
-    # ===============================
-    # TIME GRAPH
-    # ===============================
-
+    # TIME
     for algo in algorithms:
         ax1.plot(
             x_positions,
@@ -95,14 +96,14 @@ def run_benchmark():
         )
 
     ax1.set_ylabel("Execution Time (s)")
-    ax1.set_title("Chess Puzzle - Execution Time Comparison")
+    ax1.set_title("Execution Time")
     ax1.set_xticks(x_positions)
-    ax1.set_xticklabels(test_names)
+    ax1.set_xticklabels(test_names, rotation=45, ha='right') 
     ax1.legend()
     ax1.grid(True)
 
     # ===============================
-    # MEMORY GRAPH
+    # MEMORY
     # ===============================
 
     for algo in algorithms:
@@ -114,9 +115,9 @@ def run_benchmark():
         )
 
     ax2.set_ylabel("Memory Usage (MB)")
-    ax2.set_title("Chess Puzzle - Memory Usage Comparison")
+    ax2.set_title("Memory Usage")
     ax2.set_xticks(x_positions)
-    ax2.set_xticklabels(test_names)
+    ax2.set_xticklabels(test_names, rotation=45, ha='right')
     ax2.legend()
     ax2.grid(True)
 
@@ -125,4 +126,4 @@ def run_benchmark():
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    run_benchmark(target_prefix="801")
